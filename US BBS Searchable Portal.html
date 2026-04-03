@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* Centering the entire application */
+        body { 
+            font-family: sans-serif; 
+            background-color: #f4f7f6; 
+            margin: 0;
+            padding: 40px 20px; 
+            color: #333; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .app-container {
+            width: 100%;
+            max-width: 900px; /* Limits width for better readability */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h2 { margin-bottom: 25px; color: #2c3e50; }
+
+        .search-container { 
+            display: flex; 
+            gap: 15px; 
+            margin-bottom: 25px; 
+            width: 100%;
+        }
+
+        input { 
+            padding: 12px; 
+            border: 1px solid #ccc; 
+            border-radius: 6px; 
+            flex: 1; 
+            font-size: 16px;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .results-info { 
+            margin-bottom: 15px; 
+            font-weight: bold; 
+            color: #7f8c8d;
+            align-self: flex-start; /* Keeps text aligned with table edge */
+        }
+
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            background: white; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05); 
+        }
+
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
+        
+        th { 
+            background-color: #2c3e50; 
+            color: white; 
+            text-transform: uppercase;
+            font-size: 13px;
+            letter-spacing: 0.5px;
+        }
+
+        tr:hover { background-color: #fcfcfc; }
+        
+        .state-tag { 
+            background: #e0e0e0; 
+            padding: 4px 8px; 
+            border-radius: 4px; 
+            font-size: 0.85em; 
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        code { 
+            background: #f8f8f8; 
+            padding: 3px 6px; 
+            border-radius: 4px; 
+            color: #c0392b;
+            font-family: "Courier New", Courier, monospace;
+        }
+
+        @media (max-width: 600px) {
+            .search-container { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <h2>📡 US BBS Search Portal</h2>
+        
+        <div class="search-container">
+            <input type="text" id="callSearch" placeholder="🔍 Search Callsign..." onkeyup="filterData()">
+            <input type="text" id="stateSearch" placeholder="📍 Search State (PA, VA, etc)..." onkeyup="filterData()">
+        </div>
+
+        <div class="results-info" id="countInfo">Loading records...</div>
+
+        <table id="bbsTable">
+            <thead>
+                <tr>
+                    <th>Callsign</th>
+                    <th>State</th>
+                    <th>Home BBS (H-BBS)</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        // Data source: US Callsigns and Home BBS Extra.csv 
+        const rawCsvData = `AA2YG,AA2YG.#CNY.NY.USA.NOAM
+AA3RG,AA3RG.#EPA.PA.USA.NOAM
+AA8BN,WX8OH.#EOH.OH.USA.NOAM
+AB0AF,AB0AF.#SCA.CA.USA.NOAM
+AB6MV,AB6MV.#SCA.CA.USA.NOAM
+AB8M,AB8M.#CLE.OH.USA.NOAM
+AB8MW,KY2D.#LINC.ME.USA.NOAM
+AC0TG,AC0TG.#NTX.TX.USA.NOAM
+AC0ZH,AC0ZH.#CMN.MN.USA.NOAM
+AD4FM,K1AJD.#AUG.GA.USA.NOAM
+AE4OK,N4VEM.#RICH.VA.USA.NOAM
+AE7GE,AE7GE.#WOR.OR.USA.NOAM
+AF0AJ,AF0AJ.CO.USA.NOAM
+AG7BI,AG7BI.#WWA.WA.USA.NOAM
+AJ0O,AJ0O.#MSP.MN.USA.NOAM
+HAMGAT,HAMGATEMA.N2NOV.#RICH.NY.USA.NOAM
+HOSKSJ,W2XSC.#NCA.CA.USA.NOAM
+K0LAI,K0LAI.#END.ND.USA.NOAM
+K0NTS,K0NTS.#NCO.CO.USA.NOAM
+K0WAV,K0WAV.#NWAR.AR.USA.NOAM
+K0WET,KB5YZB.#NCO.CO.USA.NOAM
+K1AJD,K1AJD.#AUG.GA.USA.NOAM
+K1MAL,KC1SEN.#SCT.CT.USA.NOAM
+K1YMI,K1YMI.#CNY.NY.USA.NOAM
+K1YON,W4MLB.#ECFL.FL.USA.NOAM
+K2IE,
+K3CHB,K3CHB.#EPA.PA.USA.NOAM
+K3CLM,K3CLM.#WPA.PA.USA.NOAM
+K3JSE,N3MEL.#EPA.PA.USA.NOAM
+K3KCB,KA3VSP.DE.USA.NOAM
+K3QQN,N3MEL.#EPA.PA.USA.NOAM
+K4GBE,WA2UPK.#CFL.FL.USA.NOAM
+K4VBX,K4VBX.#TIDE.VA.USA.NOAM
+K4WOF,K4WOF.FL.USA.NOAM
+K5DAT,K5DAT.#NEWI.WI.USA.NOAM
+K5GEO,K5GE0.NM.USA.NOAM
+K6IRF,K6IRF..#SCA.CA.USA.NOAM
+K6NKO,K6NKO.#SCA.CA.USA.NOAM
+K6RKY,K6RKY@KD6MTU.#NNV.NV.USA.NOAM
+K7EK,K7EK.#NOKY.KY.USA.NOAM
+K7OLI,AE7GE.#WOR.OR.USA.NOAM
+K7SKI,K7SKI.#BOI.ID.USA.NOAM
+K8OPG,KB8UVN.#CMH.OH.USA.NOAM
+K9CTB,K9CTB.IN.USA.NOAM
+K9ELM,K9ELM.#SCWI.WI.USA.NOAM
+K9HKS,K5DAT.#NEWI.WI.USA.NOAM
+K9NSE,K9NSE.#SCWI.WI.USA.NOAM
+K9VSO,KB9SOZ.#CWI.WI.USA.NOAM
+KA0PND,"KA0PND.#EI.IA.USA.NOAM, "
+KA1YZC,KA1YZC.#SCT.CT.USA.NOAM
+KA2R,N3MEL.#EPA.PA.USA.NOAM
+KA3BVJ,KA3BVJ.#EPA.PA.USA.NOAM
+KA3VSP,KA3VSP.DE.USA.NOAM
+KA8BJA,WX8OH.#EOH.OH.USA.NOAM
+KB1NAL,KA1YZC.#SCT.CT.USA.NOAM
+KB3ICU,KB3ICU.#CHBG.PA.USA.NOAM
+KB3KOW,KB3KOW.#SMD.MD.USA.NOAM
+KB3PCY,N3MEL.#EPA.PA.USA.NOAM
+KB5YZB,KB5YZB.#NCO.CO.USA.NOAM
+KB6NZV,KB6NZV.#NWOR.OR.USA.NOAM
+KB8HHQ,KB8HHQ.#UPMI.MI.USA.NOAM
+KB8OAK,KB8OAK.#SWMI.MI.USA.NOAM
+KB8UVN,KB8UVN.#CMH.OH.USA.NOAM
+KB9PVH,KB9PVH.#SCWI.WI.USA.NOAM
+KB9UNZ,KB9UNZ.#SCWI.WI.USA.NOAM
+KC1JFN,KC1JFN.#SCT.CT.USA.NOAM
+KC1JMH,KC1JMH.#CUMB.ME.USA.NOAM
+KC1SEN,KC1SEN.#SCT.CT.USA.NOAM
+KC1UIX,KC1UIX.#YORK.ME.USA.NOAM
+KC2HJU,N3MEL.#EPA.PA.USA.NOAM
+KC2IHX,KC2IHX.#EWA.WA.USA.NOAM
+KC2NJV,KC2NJV.#NASS.NY.USA.NOAM
+KC3BTV,KC3BTV.DE.USA.NOAM
+KC3FQF,KA3VSP.DE.USA.NOAM
+KC3OLO,KC3OLO.#WPA.PA.USA
+KC3SMW,KC3SMW.#EPA.PA.USA.NOAM
+KC3WXS,W3PHB.#WPA.PA.USA.NOAM
+KC3ZCC,N3MEL.#EPA.PA.USA.NOAM
+KC4NWK,KC4NWK.#GNV.FL.USA.NOAM
+KC5PQX,KC5PQX.TN.USA.NOAM
+KC7MRY,KC7MRY.#WPA.PA.USA.NOAM
+KC8EMF,KB8HHQ.#UPMI.MI.USA.NOAM
+KC8KPM,KC8KPM.#SWMI.MI.USA.NOAM
+KC9MTP,KC9MTP.#NWIN.IN.USA.NOAM
+KC9UHI,KC9UHI.#ECWI.WI.USA.NOAM
+KC9VMO,KC9VMO.#SEWI.WI.USA.NOAM
+KD0RQU,KD0RQU.#SECO.CO.USA.NOAM
+KD2HZG,KD2HZG.#NOVA.VA.USA.NOAM
+KD2MEN,N2MH.#NNJ.NJ.USA.NOAM
+KD2YCK,KD2YCK.#NNJ.NJ.USA.NOAM
+KD3BFP,KD3BFP.MD.USA.NOAM
+KD3BTI,N3HYM.#FRDK.MD.USA.NOAM
+KD4QNA,N3MEL.#EPA.PA.USA.NOAM
+KD4WLE,N4TDX.#SFL.FL.USA.NOAM
+KD5LPB,KD5LPB.#NCO.CO.USA.NOAM
+KD5TCY,KD5TCY.#NWAR.AR.USA.NOAM
+KD6MTU,KD6MTU.#NNV.NV.USA.NOAM
+KD6OAT,KD6OAT.#SLC.UT.USA.NOAM
+KD8FMR,KD8FMR.#SRQ.FL.USA.NOAM
+KD8FTR,KD8FTR.#NEOH.OH.USA.NOAM
+KD8GXL,KD8FTR.#NEOH.OH.USA.NOAM
+KD9KGQ,KD9KGQ.#SWWI.WI.USA.NOAM
+KD9KYL,KD9KYL.#CWI.WI.USA.NOAM
+KE0GB,KE0GB.#SECO.CO.USA.NOAM
+KE0SMR,KE0SMR.#SECO.CO.USA.NOAM
+KE4CR,KD4WLE.#SFL.FL.USA.NOAM
+KE4QCM,KE4QCM.#NCGA.GA.USA.NOAM
+KE4TP,N3MEL.#EPA.PA.USA.NOAM
+KE5YTA,KE5YTA.#NTX.TX.USA.NOAM
+KE6JJJ,KE6JJJ.#NCA.CA.USA.NOAM
+KE6ONV,KE6ONV.#SCA.CA.USA.NOAM
+KE8NAD,KE8NAD.#CLE.OH.USA.NOAM
+KE8YGW,KE8YGW.#NEOH.OH.USA.NOAM
+KF0EVW,W0NE.#SEMN.MN.USA.NOAM
+KF0IZW,N3MEL.#EPA.PA.USA.NOAM
+KF5JRV,KF5JRV.#NWAR.AR.USA.NAOM
+KF5RLL,KF5RLL.#STX.TX.USA.NOAM
+KF9CP,WG0A.#MSP.MN.USA.NOAM
+KG7AV,KG7AV.#BND.OR.USA.NOAM
+KH6OWL,KH6OWL.HI.USA.NOAM
+KI0BK,KI0BK.#NEKS.KS.USA.NOAM
+KI5BZO,KI5BZO.#NETX.TX.USA.NOAM
+KI5HMI,KI5HMI.#STX.TX.USA.NOAM
+KI6BCJ,K7EK.#NOKY.KY.USA.NOAM
+KI6QCY,KI6QCY.#NCA.CA.USA.NOAM
+KJ4MZ,N3MEL.#EPA.PA.USA.NOAM
+KK4DIV,KK4DIV.#NWFL.FL.USA.NOAM
+KK4ECR,WW4BSA.NEFL.FL.USA.NOAM
+KK6AHZ,KK6AHZ.#SCA.CA.USA.NOAM
+KK6GXG,KK6GXG.#SOR.OR.USA.NOAM
+KK6HWN,N0ARY.#NCA.CA.USA.NOAM
+KK6UIK,KK6UIK.#NNV.NV.USA.NOAM
+KK7MLS,N3MEL.#EPA.PA.USA.NOAM
+KM2E,WA2UET.#ENY.NY.USA.NOAM
+KM4ROF,KK4DIV.#NWFL.FL.USA.NOAM
+KM6JTD,KM6JTD.#SCA.CA.USA.NOAM
+KN4LQN,KN4LQN.#RICH.VA.USA.NOAM
+KN4QGQ,N4VEM.#RICH.VA.USA.NOAM
+KN4ZPT,N4VEM.#RICH.VA.USA.NOAM
+KN4ZXF,N4SD.#TIDE.VA.USA.NOAM
+KN6YLK,KN6YLK.#SCA.CA.USA.NOAM
+KO4RYU,KN4LQN.#RICH.VA.USA.NOAM
+KO4SSA,KO4SSA.#TIDE.VA.USA.NOAM
+KO4UOQ,N4VEM.#RICH.VA.USA.NOAM
+KO4YAW,KO4YAW.#NCO.CO.USA.NOAM
+KO6ECA,KQ6UP.#SCA.CA.USA.NOAM
+KP3FT,KP3FT.#CNY.NY.USA.NOAM
+KQ4CIN,KQ4CIN.TN.USA.NOAM
+KQ4FJZ,K7EK.#NOKY.KY.USA.NOAM
+KQ4HNX,N4VEM.#RICH.VA.USA.NOAM
+KQ6UP,KQ6UP.#SCA.CA.USA.NOAM
+KR4BOQ,K4VBX.#TIDE.VA.USA.NOAM
+KR4EYF,N4VEM.#RICH.VA.USA.NOAM
+KR8X,KR8X.#NTX.TX.USA.NOAM
+KT0V,KT0V.#NEWI.WI.USA.NOAM
+KU0HN,W9GM.#SWWI.WI.USA.NOAM
+KX4AC,N3MEL.#EPA.PA.USA.NOAM
+KX4EF,KN4LQN.#RICH.VA.USA.NOAM
+N0ARY,N0ARY.#NCA.CA.USA.NOAM
+N0HI,N0HI.#NCO.CO.USA.NOAM
+N0IMJ,N0IMJ.#SEWI.WI.USA.NOAM
+N0JAR,KR4PI.#SWFL.FL.USA.NOAM
+N0KQX,N0KQX.SWKS.KS.USA.NOAM
+N0LBW,N3MEL.#EPA.PA.USA.NOAM
+N0VRS,N0VRS.#NWOH.OH.USA.NOAM
+N1NIS,W1EDH.#CCT.CT.USA.NOAM
+N1OF,N0VRS.#NWOH.OH.USA.NOAM
+N1OSJ,N3IP.#SEPA.PA.USA.NOAM
+N1URO,N1URO.#JNOS.CT.USA.NOAM
+N2GWK,N2GWK.#NCKY.KY.USA.NOAM
+N2KGC,N2KGC.#CNY.NY.USA.NOAM
+N2MH,N2MH4.#SENC.NC.USA.NOAM
+N2MH4,N2MH4.#SENC.NC.USA.NOAM
+N2MH6,N2MH6.USA.NOAM
+N2NOV,N2NOV.#RICH.NY.USA.NOAM
+N2UFM,N2UFM.NY.USA.NOAM
+N3DWB,N3DWB.PA.USA.NOAM
+N3FIX,N3FIX.#EPA.PA.USA.NOAM
+N3FUD,N3FUD.#EPA.PA.USA.NOAM
+N3GSD,N3GSD.#SEPA.PA.USA.NOAM
+N3HYM,N3HYM.#FRDK.MD.USA.NOAM
+N3IP,N3IP.#SEPA.PA.USA.NOAM
+N3LBP,N3LBP#EPA.PA.USA.NOAM
+N3MEL,N3MEL.#EPA.PA.USA.NOAM
+N3VEM,N3VEM.#EPA.PA.USA.NOAM
+N4ACK,N3MEL.#EPA.PA.USA.NOAM
+N4AXX,N3MEL.#EPA.PA.USA.NOAM
+N4JAW,N4JAW.#NCKY.KY.USA.NOAM
+N4NVD,N4NVD.#STX.TX.USA.NOAM
+N4QMI,N4QMI.#SWTN.TN.USA.NOAM
+N4RJB,N3MEL.#EPA.PA.USA.NOAM
+N4SD,N4SD.#TIDE.VA.USA.NOAM
+N4SFL,N4SFL.#SFL.FL.USA.NOAM
+N4TDX,N4TDX.FL.USA.NOAM
+N4VEM,N4VEM.#RICH.VA.USA.NOAM
+N5ATR,N5ATR.NM.USA.NOAM
+N5DAT,K5DAT.#NEWI.WI.USA.NOAM
+N5MDT,N5MDT.#STX.TX.USA.NOAM
+N6CTA,N6CTA.#SCA.CA.USA.NOAM
+N6PNK,N6PNK.#NCA.CA.USA.NOAM
+N6RME,N6RME.#NCA.CA.USA.NOAM
+N6ROE,N6ROE.#STX.TX.USA.NOAM
+N7HPX,N7HPX.#BOI.ID.USA.NOAM
+N7TTQ,N7TTQ.#SWWI.WI.USA.NOAM
+N8EMA,NC8Q.#DAY.OH.USA.NOAM
+N8FLA,N4SFL.#SFL.FL.USA.NOAM
+N8FWD,N8FWD.#NCWV.WV.USA.NOAM
+N8HEE,N8HEE.#SWMI.MI.USA.NOAM
+N8WQ,NC8Q.#DAY.OH.USA.NOAM
+N9CDT,W9GM.#SWWI.WI.USA.NOAM
+N9LYA,N9LYA.#SIN.IN.USA.NOAM
+N9MEL,N9MEL.NEFL.FL.USA.NOAM
+N9NMR,N9NMR.#SEWI.WI.USA.NOAM
+N9PMO,N9PMO.#SEWI.WI.USA.NOAM
+N9SEO,N9SEO.#NAR.AR.USA.NOAM
+NC8Q,NC8Q.#DAY.OH.USA.NOAM
+NH6SP,NH6SP.HI.USA.NOAM
+NJ3H,NJ3H.#COR.OR.USA.NOAM
+NJVBBS,NJVBBS.#RICH.NY.USA.NOAM
+NM5PB,NM5PB.IA.USA.NOAM
+NP3AL,NP3AL.PR.USA.NOAM
+NP4D,WP4JLZ.PR.USA.CARB
+NP4GT,NP4GT.PR.USA.CARB
+NP4JN,NP4JN.PR.USA.CARB
+NR0Q,#NEOK.OK.USA.NOAM
+NS2B,NS2B.#WNY.NY.USA.NOAM
+NY3J,N3MEL.#EPA.PA.USA.NOAM
+W0ARP,W0ARP.#NCO.CO.USA.NOAM
+W1BKW,KC1UIX.#YORK.ME.USA.NOAM
+W1CDN,W1CDN.#NWMN.MN.USA.NOAM
+W1CLK,N3MEL.#EPA.PA.USA.NOAM
+W1DTX,W1DTX.#HANC.ME.USA.NOAM
+W1EDH,W1EDH.#CCT.CT.USA.NOAM
+W1LEM,W1DTX.#HANC.ME.USA.NOAM
+W1TM,W1TM.KS.USA.NOAM
+W1VEG,KW1U.#EMA.MA.USA.NOAM
+W1XSC,W1XSC.#NCA.CA.USA.NOAM
+W2AFE,N3MEL.#EPA.PA.USA.NOAM
+W2ILT,N3MEL.#EPA.PA.USA.NOAM
+W2PAX,W4DNA.NC.USA.NOAM
+W2QS,W2QS.#UCA.NY.USA.NOAM
+W3ACH,W3ACH.#WPA.PA.USA.NOAM
+W3HZU,W3HZU.#EPA.PA.USA.NOAM
+W3ICK,N3MEL.#EPA.PA.USA.NOAM
+W3ND,W3ND.#EPA.PA.USA.NOAM
+W3PHB,W3PHB.#WPA.PA.USA.NOAM
+W3PTH,N3MEL.#EPA.PA.USA.NOAM
+W3PVX,N4VEM.#RICH.VA.USA.NOAM
+W3TQG,KE0GB.#SECO.CO.USA.NOAM
+W4MLB,W4MLB.#ECFL.FL.USA.NOAM
+W4RFJ,W4RFJ.#WNCFL.FL.USA.NOAM
+W5PWS,N4VEM.#RICH.VA.USA.NOAM
+W6POC,KE6CH0.#NCA.CA.USA.NOAM
+W6RAY,W6RAY.#NCA.CA.USA.NOAM
+W6TJ,W6TJ.#SCA.CA.USA.NOAM
+W7BMH,W7BMH.#WOR.OR.USA.NOAM
+W7EES,W7EES.#NWOR.OR.USA.NOAM
+W8EDU,W8EDU.#CLE.OH.USA.NOAM
+W8HF,KD8FTR.#NEOH.OH.USA.NOAM
+W8KVK,KB8UVN.#CMH.OH.USA.NOAM
+W9GM,W9GM.#SWWI.WI.USA.NOAM
+W9LCF,W9LCF.#NEIN.IN.USA.NOAM
+WA2PNU,WA2PNU.#NLI.NY.USA.NOAM
+WA2UET,WA2UET.#ENY.NY.USA.NOAM
+WA3WLH,WA3WLH.#EPA.PA.USA.NOAM
+WA3Z,KP3FT.#CNY.NY.USA.NOAM
+WA4TKG,KC4NWK.#GNV.FL.USA.NOAM
+WA5EOC,WA5EOC.TX.USA.NOAM
+WA6HVC,WQ6N.#SCA.CA.USA.NOAM
+WA8RSA,WA8RSA.#SWMI.NOAM,USA "
+WA9JG,WA9JG.#STX.TX.USA.NOAM
+WB2CMF,WB2CMF.#NLI.NY.USA.NOAM
+WB4MOZ,WB4MOZ.#SFL.FL.USA.NOAM
+WB4QOJ,WB4QOJ.#ATL.GA.USA.NOAM
+WB4WPF,WB4WPF.#SEFL.FL.USA.NOAM
+WB8ERJ,WB8ERJ.#NEOH.OH.USA.NOAM
+WB8VLC,AE7GE.#WOR.OR.USA.NOAM
+WC9P,WC9P.IL.USA.NOAM
+WD0HDR,WD0HDR.#NCO.CO.USA.NOAM
+WD3O,N4VEM.#RICH.VA.USA.NOAM
+WG0A,WG0A.#MSP.MN.USA.NOAM
+WG3K,WG3K.#SMD.MD.USA.NOAM
+WH6ANH,N0HI.#NCO.CO.USA.NOAM
+WH6GSY,N4VEM.#RICH.VA.USA.NOAM
+WK4WC,W4DNA.NC.USA.NOAM
+WP3BM,WP3BM.PR.USA.CARB
+WP3MM,WP3MM.PR.USA.CARB
+WP4DMD,WP4DMD.PR.USA.CARB
+WP4LSC,NP4JN.PR.USA.NOAM
+WP4OH,WP4OH.PR.USA.NOAM
+WP4QNQ,WP4QNQ.PR.USA.CARB
+WQ6N,WQ6N.#SCA.CA.USA.NOAM
+WW2BSA,WW2BSA.NJ.USA.NOAM
+WW4BSA,WW4BSA.#NFL.FL.USA.NOAM
+WW5TOM,WA5EOC.TX.USA.NOAM
+WW6Q,WW6Q.#NEIN.IN.USA.NOAM
+WY7EMT,WY7EMT.WY7EMT.AZ.USA.NOAM`;
+
+        let parsedRecords = [];
+
+        function parseCSV() {
+            const lines = rawCsvData.split('\n');
+            lines.forEach(line => {
+                if (!line.trim()) return;
+                
+                const parts = line.split(',');
+                const call = parts[0].trim().replace(/^"|"$/g, '');
+                let bbs = parts.slice(1).join(',').trim().replace(/^"|"$/g, '');
+                
+                if (call && bbs) {
+                    let state = "US";
+                    const stateMatch = bbs.match(/\.([A-Z]{2})\.USA/);
+                    if (stateMatch) {
+                        state = stateMatch[1];
+                    } else {
+                        const altMatch = bbs.match(/#([A-Z]{2,4})\.([A-Z]{2})\.USA/);
+                        if (altMatch) state = altMatch[2];
+                    }
+
+                    parsedRecords.push({ 
+                        call: call.toUpperCase(), 
+                        bbs: bbs, 
+                        state: state.toUpperCase() 
+                    });
+                }
+            });
+            filterData();
+        }
+
+        function filterData() {
+            const callQuery = document.getElementById('callSearch').value.toUpperCase();
+            const stateQuery = document.getElementById('stateSearch').value.toUpperCase();
+            const tbody = document.getElementById('tableBody');
+            
+            const filtered = parsedRecords.filter(r => 
+                r.call.includes(callQuery) && r.state.includes(stateQuery)
+            );
+
+            document.getElementById('countInfo').innerText = `Displaying ${filtered.length} Hubs`;
+            
+            tbody.innerHTML = filtered.map(r => `
+                <tr>
+                    <td><strong>${r.call}</strong></td>
+                    <td><span class="state-tag">${r.state}</span></td>
+                    <td><code>${r.bbs}</code></td>
+                </tr>
+            `).join('');
+        }
+
+        parseCSV();
+    </script>
+</body>
+</html>
